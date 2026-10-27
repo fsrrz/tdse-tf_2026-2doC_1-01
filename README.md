@@ -12,9 +12,9 @@
 ### Bitácora de Entregas
 | N° | Detalles | Fecha | Deadline |
 | :--: | :--------------------- | :------: | :-------: |
-| 01 | README.md | | Semana 08 |
-| 02 | Propuesta.md | | Semana 11 |
-| 03 | Informe_de_Avance.md | | Semana 14 |
-| 04 | Memoria_Video_Código.md | | Semana 17 |
+| 01 | README.md | 27-10-26| Semana 08 |
+| 02 | Propuesta.md | 27-10-26| Semana 11 |
+| 03 | Informe_de_Avance.md | - | Semana 14 |
+| 04 | Memoria_Video_Código.md | - | Semana 17 |
 
 TA134 – TdSE – TF – Entregas –
