@@ -6,7 +6,7 @@ El objetivo de este proyecto es diseñar e implementar un sistema embebido inter
 
 <img src="https://i.redd.it/h8cr1vmo8hbf1.jpeg" alt="image2" width="50%">
  
-<img src="ben10.gif" alt="Ben 10" width="300"/>
+<img src="ben10.gif" alt="Ben 10" width="50%"/>
 
 *1.2 Proyectos similares analizados*
 
