@@ -152,11 +152,76 @@ Los principales desafíos que se van a afrontar son lograr que todo el sistema f
 
 
 
-###### **1.3.1 Diagrama en bloques**
+#### 1.4 Diagrama en bloques
 
 ![](DiagramaEnBloques.png)
 <p align="center"><em>Figura 1: Diagrama en Bloques del proyecto</em></p>
 
+En la Figura 1 se presenta el diagrama en bloques del proyecto, el cual se separa en las 3 etapas esperadas, Escrutar/Procesar/Actuar:
+
+- Escrutar: Entradas analógicas del sistema, como la señal de audio entrante por el jack de 3,5 mm junto con los sensores para ajustar parámetros a guardar en el modo SET_UP, como los dip switches para cambiar de modo (NORMAL, SET_UP), el botón de confirmación del modo seleccionado y un potenciómetro para ajustar la ganancia de las bandas.
+
+- Procesar: Super-Loop de 1ms en el cual debe caber todo el procesamiento, como el cálculo del espectro de la señal utilizando el algoritmo DHT (junto con el cálculo de las magnitudes y su agrupamiento por bandas), el filtrado antirrebote del botón de confirmación, las maquinas de estado para cada modo de operación (NORMAL, SET_UP, FALLA), la persistencia de la configuración elegida por el ususario, y las rutinas de interrupción por DMA tanto para el buffer lleno como para el control de la matriz LED. 
+
+- Actuar: Las salidas del sistema, como la matriz LED para visualizar el espectro de las eñal de entrada, la pantalla OLED para visualización de la configuración/modo de operación, la comunicación del módulo Bluetooth con la aplicación vía UART + DMA y el buzzer para indicar el modo FALLA.
+
+#### 1.5 Análisis de Viabilidad
+
+Para evaluar la viabilidad de la propuesta se implementó el algoritmo de la Transformada Rápida de Hartley (FHT) y se midieron sus tiempos de ejecución, con el objetivo de verificar que el procesamiento sea compatible con la condición del SuperLoop y deje margen suficiente para el resto de las tareas del sistema.
+
+### Primeras implementaciones
+
+Los primeros intentos arrojaron tiempos elevados: algunos no cumplían la condición del SuperLoop y otros dejaban muy poco margen para procesar otras tareas (alrededor de 0,2 ms). A medida que se analizó en detalle cada etapa del algoritmo (inversión de índices, cálculo de las mariposas y obtención de las magnitudes del espectro) fue posible identificar los puntos críticos y optimizarlos.
+
+### Metodología de las pruebas
+
+Para las pruebas se generó un arreglo de 256 muestras con valores aleatorios, simulando el muestreo de una señal con ruido (de modo que casi todas las frecuencias tengan magnitud distinta de cero). Sobre este arreglo se aplicó la FHT junto con el cálculo de las magnitudes. Se registraron las siguientes variables:
+
+- `ciclos_totales`: ciclos de reloj consumidos por el procesamiento completo.
+- `tiempo_dht_us`: tiempo, en microsegundos, de la FHT únicamente (inversión de índices y mariposas).
+- `tiempo_total_us`: tiempo, en microsegundos, de la FHT más el cálculo de las magnitudes.
+
+### Caso 1: señal con ruido y cálculo de magnitud exacto
+
+| Variable | Valor |
+|---|---|
+| `ciclos_totales` | 40781 |
+| `tiempo_dht_us` | 285,47 µs |
+| `tiempo_total_us` | 566,40 µs |
+
+### Caso 2: señal con ruido y magnitud aproximada
+
+| Variable | Valor |
+|---|---|
+| `ciclos_totales` | 24147 |
+| `tiempo_dht_us` | 285,47 µs |
+| `tiempo_total_us` | 335,38 µs |
+
+### Análisis de resultados
+
+Al comparar ambos casos, el tiempo de la FHT es idéntico (285,47 µs), mientras que el tiempo total varía en 0,231 ms. Esto indica que el cálculo de los valores absolutos del espectro es una de las etapas más costosas del procesamiento. Las magnitudes de la FHT se obtienen como:
+
+<p align="center"><img width="727" height="78" alt="magnitudDHT" src="https://github.com/user-attachments/assets/18973389-ddd7-4594-a604-0bb20c435239" />
+<p align="center"><em>Figura 2: Magnitud exacta FHT</em></p>
+
+
+Con 256 muestras, el algoritmo debe calcular 128 raíces cuadradas sin FPU, lo que aumenta de forma significativa el tiempo de procesamiento.
+
+
+
+El cuello de botella no está en la FHT en sí, sino en el cálculo exacto de las magnitudes, que requiere 128 raíces cuadradas sin FPU y eleva el tiempo total a 40781 ciclos (0,566 ms). Reemplazarlo por la aproximación reduce el tiempo total en aproximadamente un 41 % sin afectar el objetivo de visualización, ya que la matriz LED RGB de 8x8 solo representa 8 niveles de "volumen" y el error de la aproximación resulta imperceptible.
+
+Dado que el microcontrolador ya opera a su frecuencia máxima, no existe margen adicional por aumento de reloj; por ello, las optimizaciones a nivel algorítmico, como la aproximación de magnitudes, son las que permiten asegurar la viabilidad del procesamiento en tiempo real.
+
+### Optimización mediante Alpha Max Beta Min
+
+Al identificar que el cálculo de las magnitudes tiene un peso importante en el tiempo total, se evaluó prescindir de las magnitudes exactas y se probó el algoritmo **Alpha Max Beta Min**, que aproxima la raíz cuadrada de una suma de cuadrados sin necesidad de calcularla. Esta aproximación permitió reducir el tiempo total a 0,335 ms (Caso 2), lo que equivale a una reducción de aproximadamente el 41 % respecto del cálculo exacto (0,566 ms), y de los ciclos consumidos de 40781 a 24147.
+
+El costo de esta optimización es un error de aproximación que depende de la fase entre H[k] y H[N-k]. Se considera que este error no es relevante para la propuesta, ya que el espectro de la señal de entrada se mostrará en una matriz LED RGB de 8x8, por lo que solo se contará con 8 niveles de "volumen" y la diferencia resulta imperceptible en la visualización.
+
+### Conclusión
+
+Las pruebas se realizaron con el microcontrolador funcionando a su frecuencia máxima de 72 MHz. En esas condiciones, la FHT de 256 muestras resulta viable para la propuesta: la transformada (inversión de índices y mariposas) se ejecuta en 285,47 µs, equivalentes a unos 20.550 ciclos de reloj. Al sumar el cálculo de las magnitudes mediante Alpha Max Beta Min, el procesamiento completo toma 24147 ciclos, es decir, 0,335 ms. Esto compatibiliza el algoritmo con la condición del SuperLoop y deja margen para el resto de las tareas del sistema.
 
 ### **2. Elicitación de requisitos y casos de uso**
 
